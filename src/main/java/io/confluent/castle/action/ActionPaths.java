@@ -42,6 +42,7 @@ public final class ActionPaths {
     public static final String ZK_PROPERTIES = ZK_CONF + "/zookeeper.properties";
     public static final String ZK_LOG4J = ZK_CONF + "/log4j.properties";
     public static final String ZK_OPLOGS = ZK_ROOT + "/oplogs";
+    public static final String ZK_MYID = ZK_OPLOGS + "/myid";
     public static final String ZK_LOGS = LOGS_ROOT + "/zookeeper";
 
     public static final String TROGDOR_AGENT_ROOT = "/mnt/trogdor-agent";

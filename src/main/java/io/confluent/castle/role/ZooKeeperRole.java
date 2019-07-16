@@ -23,19 +23,33 @@ import io.confluent.castle.action.Action;
 import io.confluent.castle.action.ZooKeeperStartAction;
 import io.confluent.castle.action.ZooKeeperStatusAction;
 import io.confluent.castle.action.ZooKeeperStopAction;
+import io.confluent.castle.cluster.CastleCluster;
+import io.confluent.castle.cluster.CastleNode;
+import io.confluent.castle.common.DynamicVariableProvider;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Map;
 
 public class ZooKeeperRole implements Role {
     public static final String ZOOKEEPER_CLASS_NAME =
         "org.apache.zookeeper.server.quorum.QuorumPeerMain";
 
     private final int initialDelayMs;
+    private final int tickTimeMs;
+    private final int initLimit;
+    private final int syncLimit;
 
     @JsonCreator
-    public ZooKeeperRole(@JsonProperty("initialDelayMs") int initialDelayMs) {
+    public ZooKeeperRole(@JsonProperty("initialDelayMs") int initialDelayMs,
+                         @JsonProperty("tickTime") int tickTimeMs,
+                         @JsonProperty("initLimit") int initLimit,
+                         @JsonProperty("syncLimit") int syncLimit) {
         this.initialDelayMs = initialDelayMs;
+        this.tickTimeMs = tickTimeMs;
+        this.initLimit = initLimit;
+        this.syncLimit = syncLimit;
     }
 
     @JsonProperty
@@ -43,6 +57,20 @@ public class ZooKeeperRole implements Role {
         return initialDelayMs;
     }
 
+    @JsonProperty
+    public int getTickTimeMs() {
+        return tickTimeMs;
+    }
+
+    @JsonProperty
+    public int getInitLimit() {
+        return initLimit;
+    }
+
+    @JsonProperty
+    public int getSyncLimit() {
+        return syncLimit;
+    }
     @Override
     public Collection<Action> createActions(String nodeName) {
         ArrayList<Action> actions = new ArrayList<>();
@@ -51,4 +79,16 @@ public class ZooKeeperRole implements Role {
         actions.add(new ZooKeeperStopAction(nodeName, this));
         return actions;
     }
+
+    @Override
+    public Map<String, DynamicVariableProvider> dynamicVariableProviders() {
+        return Collections.singletonMap("zkConnect", new DynamicVariableProvider(0) {
+            @Override
+            public String calculate(CastleCluster cluster, CastleNode node) {
+                return cluster.getZooKeeperConnectString();
+            }
+        });
+    }
+
+
 };

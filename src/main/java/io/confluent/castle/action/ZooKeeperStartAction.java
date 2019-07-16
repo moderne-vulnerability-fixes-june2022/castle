@@ -27,7 +27,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
 
 import static io.confluent.castle.action.ActionPaths.ZK_CONF;
 import static io.confluent.castle.action.ActionPaths.ZK_LOGS;
@@ -50,20 +52,24 @@ public class ZooKeeperStartAction extends Action  {
 
     @Override
     public void call(final CastleCluster cluster, final CastleNode node) throws Throwable {
-        File configFile = null, log4jFile = null;
+        File configFile = null, log4jFile = null, myidFile = null;
         try {
             configFile = writeZooKeeperConfig(cluster, node);
             log4jFile = writeZooKeeperLog4j(cluster, node);
+            myidFile = writeMyID(cluster, node);
             CastleUtil.killJavaProcess(cluster, node, ZooKeeperRole.ZOOKEEPER_CLASS_NAME, false);
             node.uplink().command().args(createSetupPathsCommandLine()).mustRun();
             node.uplink().command().syncTo(configFile.getAbsolutePath(),
                 ActionPaths.ZK_PROPERTIES).mustRun();
             node.uplink().command().syncTo(log4jFile.getAbsolutePath(),
                 ActionPaths.ZK_LOG4J).mustRun();
+            node.uplink().command().syncTo(myidFile.getAbsolutePath(),
+                ActionPaths.ZK_MYID).mustRun();
             node.uplink().command().args(createRunDaemonCommandLine()).mustRun();
         } finally {
             CastleUtil.deleteFileOrLog(node.log(), configFile);
             CastleUtil.deleteFileOrLog(node.log(), log4jFile);
+            CastleUtil.deleteFileOrLog(node.log(), myidFile);
         }
         CastleUtil.waitFor(5, 30000, new Callable<Boolean>() {
             @Override
@@ -91,6 +97,10 @@ public class ZooKeeperStartAction extends Action  {
     }
 
     private File writeZooKeeperConfig(CastleCluster cluster, CastleNode node) throws IOException {
+        ZooKeeperRole role = node.getRole(ZooKeeperRole.class);
+        if (role == null) {
+            throw new RuntimeException("Expected the ZK node to have the ZooKeeperRole");
+        }
         File file = null;
         FileOutputStream fos = null;
         OutputStreamWriter osw = null;
@@ -100,12 +110,21 @@ public class ZooKeeperStartAction extends Action  {
                 String.format("zookeeper-%d.properties", node.nodeIndex()));
             fos = new FileOutputStream(file, false);
             osw = new OutputStreamWriter(fos, StandardCharsets.UTF_8);
+            if (role.getTickTimeMs() != 0) {
+                osw.write(String.format("tickTime=%d%n", role.getTickTimeMs()));
+            }
+            if (role.getInitLimit() != 0) {
+                osw.write(String.format("initLimit=%d%n", role.getInitLimit()));
+            }
+            if (role.getSyncLimit() != 0) {
+                osw.write(String.format("syncLimit=%d%n", role.getSyncLimit()));
+            }
             osw.write(String.format("dataDir=%s%n", ZK_OPLOGS));
             osw.write(String.format("clientPort=2181%n"));
             osw.write(String.format("maxClientCnxns=0%n"));
-            int serverIdx = 1;
             for (String nodeName : cluster.nodesWithRole(ZooKeeperRole.class).values()) {
-                osw.write(String.format("server.%d=%s:2888:3888%n", serverIdx++,
+                int serverIdx = getServerIdx(cluster, nodeName);
+                osw.write(String.format("server.%d=%s:2888:3888%n", serverIdx,
                     cluster.nodes().get(nodeName).uplink().internalDns()));
             }
             success = true;
@@ -115,6 +134,45 @@ public class ZooKeeperStartAction extends Action  {
                 osw, "temporary ZooKeeper config file OutputStreamWriter");
             CastleUtil.closeQuietly(cluster.clusterLog(),
                 fos, "temporary ZooKeeper config file FileOutputStream");
+            if (!success) {
+                CastleUtil.deleteFileOrLog(node.log(), file);
+            }
+        }
+    }
+
+    private int getServerIdx(CastleCluster cluster, String nodeName) {
+        int serverIdx = 1;
+        List<String> sortedZkNodeNames = cluster.nodesWithRole(ZooKeeperRole.class).values()
+                .stream()
+                .sorted()
+                .collect(Collectors.toList());
+        for (String zkNodeName : sortedZkNodeNames) {
+            if(zkNodeName.equals(nodeName)) {
+                return serverIdx;
+            }
+            serverIdx++;
+        }
+        throw new IllegalStateException("Did not find ZK node with name " + nodeName + " in cluster");
+    }
+
+    private File writeMyID(CastleCluster cluster, CastleNode node) throws IOException {
+        File file = null;
+        FileOutputStream fos = null;
+        OutputStreamWriter osw = null;
+        boolean success = false;
+        try {
+            int serverIdx = getServerIdx(cluster, node.nodeName());
+            file = new File(cluster.env().workingDirectory(), String.format("tmp-myid-%d", serverIdx));
+            fos = new FileOutputStream(file, false);
+            osw = new OutputStreamWriter(fos, StandardCharsets.UTF_8);
+            osw.write(String.format("%d", serverIdx));
+            success = true;
+            return file;
+        } finally {
+            CastleUtil.closeQuietly(cluster.clusterLog(),
+                    osw, "temporary myid file OutputStreamWriter");
+            CastleUtil.closeQuietly(cluster.clusterLog(),
+                    fos, "temporary myid file FileOutputStream");
             if (!success) {
                 CastleUtil.deleteFileOrLog(node.log(), file);
             }

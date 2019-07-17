@@ -90,6 +90,7 @@ public class ZooKeeperStartAction extends Action  {
 
     public static String[] createRunDaemonCommandLine() {
         return new String[] {"nohup", "env",
+            "JMX_PORT=8989",
             "LOG_DIR=\"" + ZK_LOGS + "\"",
             "KAFKA_LOG4J_OPTS=\"-Dlog4j.configuration=file:" + ActionPaths.ZK_LOG4J + "\"",
             ActionPaths.ZK_START_SCRIPT, ActionPaths.ZK_PROPERTIES,

@@ -15,28 +15,29 @@
  * limitations under the License.
  */
 
-package io.confluent.castle.action;
+package io.confluent.castle.role;
 
-/**
- * Stops the daemons on a node.
- */
-public final class DaemonStopAction extends Action {
-    public final static String TYPE = "daemonStop";
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
-    public DaemonStopAction(String scope) {
-        super(new ActionId(TYPE, scope),
-            new TargetId[] {
-                new TargetId(TaskStopAction.TYPE)
-            },
-            new String[] {
-                BrokerStopAction.TYPE,
-                CollectdStopAction.TYPE,
-                TrogdorDaemonType.AGENT.stopType(),
-                TrogdorDaemonType.COORDINATOR.stopType(),
-                ZooKeeperStopAction.TYPE,
-                SchemaRegistryStopAction.TYPE,
-                JmxDumperStopAction.TYPE
-            },
-            0);
+public class Schema {
+    private final String subject;
+    private final String schema;
+
+    @JsonCreator
+    public Schema(@JsonProperty("subject") String subject,
+                  @JsonProperty("schema") String schema) {
+        this.subject = subject == null ? "" : subject;
+        this.schema = schema == null ? "" : schema;
     }
-}
+
+    @JsonProperty
+    public String subject() {
+        return subject;
+    }
+
+    @JsonProperty
+    public String schema() {
+        return schema;
+    }
+};

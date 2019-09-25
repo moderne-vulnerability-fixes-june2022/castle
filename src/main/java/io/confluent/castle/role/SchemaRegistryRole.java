@@ -20,9 +20,9 @@ package io.confluent.castle.role;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.confluent.castle.action.Action;
-import io.confluent.castle.action.BrokerStartAction;
-import io.confluent.castle.action.BrokerStatusAction;
-import io.confluent.castle.action.BrokerStopAction;
+import io.confluent.castle.action.SchemaRegistryStartAction;
+import io.confluent.castle.action.SchemaRegistryStatusAction;
+import io.confluent.castle.action.SchemaRegistryStopAction;
 import io.confluent.castle.cluster.CastleCluster;
 import io.confluent.castle.cluster.CastleNode;
 import io.confluent.castle.common.DynamicVariableProvider;
@@ -31,17 +31,16 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
-public class BrokerRole implements Role {
-    // Handle both kafka.Kafka and SupportedKafka
-    public static final String KAFKA_CLASS_NAME = "Kafka";
+public class SchemaRegistryRole implements Role {
+    public static final String SCHEMA_REGISTRY_CLASS_NAME =
+        "io.confluent.kafka.schemaregistry.rest.SchemaRegistryMain";
 
     private static final String DEFAULT_JVM_PERFORMANCE_OPTS = "-Xmx3g -Xms3g";
 
-    private static final String DEFAULT_EXTERNAL_AUTH = "PLAINTEXT";
-
-    public static final int PORT = 9092;
+    public static final int HTTP_PORT = 8081;
 
     private final int initialDelayMs;
 
@@ -49,13 +48,13 @@ public class BrokerRole implements Role {
 
     private final String jvmOptions;
 
-    private final String externalAuth;
+    private final List<Schema> schemas;
 
     @JsonCreator
-    public BrokerRole(@JsonProperty("initialDelayMs") int initialDelayMs,
-                      @JsonProperty("conf") Map<String, String> conf,
-                      @JsonProperty("jvmOptions") String jvmOptions,
-                      @JsonProperty("externalAuth") String externalAuth) {
+    public SchemaRegistryRole(@JsonProperty("initialDelayMs") int initialDelayMs,
+                              @JsonProperty("conf") Map<String, String> conf,
+                              @JsonProperty("jvmOptions") String jvmOptions,
+                              @JsonProperty("schemas") List<Schema> schemas) {
         this.initialDelayMs = initialDelayMs;
         this.conf = conf == null ? Collections.emptyMap() :
             Collections.unmodifiableMap(new HashMap<>(conf));
@@ -64,8 +63,8 @@ public class BrokerRole implements Role {
         } else {
             this.jvmOptions = jvmOptions;
         }
-        this.externalAuth = externalAuth == null ?
-            DEFAULT_EXTERNAL_AUTH : externalAuth;
+        this.schemas = schemas == null ? Collections.emptyList() :
+            Collections.unmodifiableList(new ArrayList<>(schemas));
     }
 
     @JsonProperty
@@ -84,31 +83,31 @@ public class BrokerRole implements Role {
     }
 
     @JsonProperty
-    public String externalAuth() {
-        return externalAuth;
+    public List<Schema> schemas() {
+        return schemas;
     }
 
     @Override
     public Collection<Action> createActions(String nodeName) {
         ArrayList<Action> actions = new ArrayList<>();
-        actions.add(new BrokerStartAction(nodeName, this));
-        actions.add(new BrokerStatusAction(nodeName, this));
-        actions.add(new BrokerStopAction(nodeName, this));
+        actions.add(new SchemaRegistryStartAction(nodeName, this));
+        actions.add(new SchemaRegistryStatusAction(nodeName, this));
+        actions.add(new SchemaRegistryStopAction(nodeName, this));
         return actions;
     }
 
     @Override
     public Map<String, DynamicVariableProvider> dynamicVariableProviders() {
-        return Collections.singletonMap("bootstrapServers", new DynamicVariableProvider(0) {
+        return Collections.singletonMap("schema.registry.url", new DynamicVariableProvider(0) {
             @Override
             public String calculate(CastleCluster cluster, CastleNode node) throws Exception {
                 StringBuilder bld = new StringBuilder();
                 String prefix = "";
-                for (String nodeName : cluster.nodesWithRole(BrokerRole.class).values()) {
+                for (String nodeName : cluster.nodesWithRole(SchemaRegistryRole.class).values()) {
                     bld.append(prefix);
                     prefix = ",";
                     CastleNode brokerNode = cluster.nodes().get(nodeName);
-                    bld.append(String.format("%s:%d", brokerNode.uplink().internalDns(), PORT));
+                    bld.append(String.format("http://%s:%d", brokerNode.uplink().internalDns(), HTTP_PORT));
                 }
                 return bld.toString();
             }

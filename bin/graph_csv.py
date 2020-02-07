@@ -60,7 +60,10 @@ class CsvFile(object):
             if len(self.title_row) < 1:
                 raise RuntimeError("Expected at least one column in the first \
 line of the csv file %s" % path)
-            self.first_data_row = reader.__next__()
+            try:
+                self.first_data_row = reader.__next__()
+            except StopIteration:
+                raise RuntimeError("No first data row found in file.")
             if len(self.title_row) != len(self.first_data_row):
                 raise RuntimeError("Expected the first data row for %s to have %d \
 elements to match the title row.", path, len(self.title_row))
